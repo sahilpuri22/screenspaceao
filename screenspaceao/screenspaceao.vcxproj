@@ -71,8 +71,8 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>C:\Users\SupaSahil Admin\Dissertation\3party\Include;$(IncludePath)</IncludePath>
-    <LibraryPath>C:\Users\SupaSahil Admin\Dissertation\3party\Libs;$(LibraryPath)</LibraryPath>
+    <IncludePath>C:\Users\Admin\Dissertation\3party\Include;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\Users\Admin\Dissertation\3party\Libs;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -113,7 +113,7 @@
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>glfw3.lib;opengl32.lib;assimp-vc140-mt.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>C:\Users\SupaSahil Admin\Dissertation\3party\Libs\assimp;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\Users\Admin\Dissertation\3party\Libs\assimp;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -151,8 +151,8 @@
     <ClInclude Include="shader_s.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="hbao.fs" />
     <None Include="hbao.vs" />
+    <None Include="hbao.fs" />
     <None Include="hbao_blur.fs" />
     <None Include="ssao.fs" />
     <None Include="ssao.vs" />

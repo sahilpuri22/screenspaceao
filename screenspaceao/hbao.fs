@@ -1,77 +1,114 @@
 #version 330 core
-in vec2 TexCoords;
+
+
 out float FragColor;
 
-// Uniforms with the information needed for HBAO
+in vec2 TexCoords;
+
 uniform sampler2D gPosition;
 uniform sampler2D gNormal;
-uniform sampler2D texNoise; // Noise texture used to randomize the kernel sample directions
-uniform mat4 projection; // Projection matrix for clip-space conversion
-uniform vec3 samples[64]; // Sample kernel points
+uniform sampler2D texNoise;
 
-const int kernelSize = 64;
-const float radius = 0.1; // HBAO sampling radius
-const float bias = 0.025; // HBAO bias term
+uniform float u_AORadius = 500000.f;
+uniform float u_AOBias = 0.f;
+uniform int u_AOSamples = 4;
 
-const vec2 noiseScale = vec2(800.0/4.0, 600.0/4.0);
+uniform mat4 projection; // camera projection matrix
+uniform mat4 view; // camera view matrix
+
+const float INFINITY = 1.f/0.f;
 
 
-// Function to reconstruct view-space position from a depth value
-vec3 ViewSpacePositionFromDepth(float depth, vec2 texCoords, mat4 invProjectionMatrix) {
-    vec4 clipSpacePosition = vec4(texCoords * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
-    vec4 viewSpacePosition = invProjectionMatrix * clipSpacePosition;
-    viewSpacePosition /= viewSpacePosition.w;
-    return viewSpacePosition.xyz;
+float saturate(float a)
+{
+	return min(max(a,0),1);
 }
 
-// TBN matrix construction to transform samples from tangent-space to view-space
-mat3 TBNMatrix(vec3 normal, vec3 texNoiseVec) {
-    vec3 tangent = normalize(texNoiseVec - normal * dot(texNoiseVec, normal));
-    vec3 bitangent = cross(normal, tangent);
-    return mat3(tangent, bitangent, normal);
+vec2 calculateAO(vec3 normal, vec2 direction, vec2 screenSize, vec3 fragPos, float bias)
+{	
+	
+	float minRadius = 3.f;
+	float maxRadius = 100000.f;
+	float RAD = length( direction*vec2(u_AORadius) / (vec2(abs(fragPos.z))*screenSize));
+	RAD = clamp(RAD, minRadius, maxRadius);
+
+	vec3 viewVector = normalize(fragPos);
+
+	vec3 leftDirection = cross(viewVector, vec3(direction,0));
+	vec3 projectedNormal = normal - dot(leftDirection, normal) * leftDirection;
+	float projectedLen = length(projectedNormal);
+	projectedNormal /= projectedLen;
+
+	vec3 tangent = cross(projectedNormal, leftDirection);
+
+	float tangentAngle = atan(tangent.z / length(tangent.xy));
+	float sinTangentAngle = sin(tangentAngle + bias);
+	
+
+	vec2 texelSize = vec2(1.f,1.f) / screenSize;
+
+	float highestZ = -INFINITY;
+	vec3 foundPos = vec3(0,0,-INFINITY);
+	
+	for(int i=2; i<=4; i++) 
+	{
+		vec2 marchPosition = TexCoords + i*texelSize*direction;
+		
+		vec3 fragPosMarch = texture(gPosition, marchPosition).xyz;
+		
+		vec3 hVector = normalize(fragPosMarch-fragPos);
+
+		float rangeCheck = 1 - saturate(length(fragPosMarch-fragPos) / RAD);
+
+		hVector.z = mix(hVector.z, fragPos.z-RAD*2, rangeCheck);
+
+		if(hVector.z > highestZ && length(fragPosMarch-fragPos) < RAD)
+		{
+			highestZ = hVector.z;
+			foundPos = fragPosMarch;
+		}
+	}
+
+	float rangeCheck = smoothstep(0.0, 1.0, 10*length(screenSize) / length(foundPos - fragPos));
+	if(length(foundPos - fragPos) > length(screenSize)*100){rangeCheck=0;}
+
+	vec3 horizonVector = (foundPos - fragPos);
+	float horizonAngle = atan(horizonVector.z/length(horizonVector.xy));
+	
+	float sinHorizonAngle = sin(horizonAngle);	
+
+	vec2 result = vec2(saturate((sinHorizonAngle - sinTangentAngle))/2, projectedLen);
+	return result;
 }
 
-// The HBAO occlusion calculation based on horizon angles
-float ComputeHBAOOcclusion(vec3 origin, vec3 direction, float radius, vec3 normal, mat4 projection) {
-    float occlusion = 0.0f;
-    float totalWeight = 0.0f;
+void main()
+{
+	vec2 screenSize = textureSize(gPosition, 0).xy;
+	vec2 noiseScale = vec2(screenSize.x/4.0, screenSize.y/4.0);
+	vec2 noisePos = TexCoords * noiseScale;
 
-    for (int i = 0; i < kernelSize; ++i) {
-        // Transform the sample point from tangent space to view space
-        vec3 texNoiseVec = texture(texNoise, TexCoords * noiseScale).rgb;
-        vec3 sample = TBNMatrix(normal, texNoiseVec) * samples[i] * radius + origin;
+	vec3 fragPos   = texture(gPosition, TexCoords).xyz;
+	float bias = (3.141592 / 360) * u_AOBias;
+	if(fragPos.z == -INFINITY){FragColor = 1; return;}
 
-        // Convert the sample point to clip space coordinates
-        vec4 sampleClipSpace = projection * vec4(sample, 1.0);
-        sampleClipSpace.xyz /= sampleClipSpace.w;
-
-        // Convert to texture coordinates and fetch the depth of the sample point from the gPosition texture
-        vec2 sampleTexCoord = sampleClipSpace.xy * 0.5 + 0.5;
-        float sampleDepth = texture(gPosition, sampleTexCoord).z;
-
-        // If the sample point is behind the geometry, accumulate occlusion
-        if (sampleDepth > origin.z + bias) {
-            occlusion += 1.0f;
-        }
-        totalWeight += 1.0f; 
-    }
-
-    // Return the normalized occlusion factor
-    return 1.0 - occlusion / totalWeight;
-}
-
-void main() {
-    // Retrieve view-space position and normal for the current fragment
-    float depth = texture(gPosition, TexCoords).r;
-    vec3 position = ViewSpacePositionFromDepth(depth, TexCoords, inverse(projection));
     vec3 normal = normalize(texture(gNormal, TexCoords).rgb);
 
-    // Fetch randomization vector from noise texture and scale by noise tile size
-    vec3 randomVec = texture(texNoise, TexCoords * noiseScale).rgb;
+	vec2 randomVec = normalize(texture2D(texNoise, noisePos).xy); 
 
-    // Compute HBAO occlusion using the horizon-based occlusion function
-    float occlusion = ComputeHBAOOcclusion(position, normal, radius, projection);
+	vec2 result = vec2(0,0);
 
-    // Write out the occlusion factor, to be used in the lighting pass
-    FragColor = occlusion;
+	vec3 viewVector = normalize(fragPos);
+
+	result += calculateAO(normal, vec2(randomVec), screenSize, fragPos,bias);
+	result += calculateAO(normal, -vec2(randomVec), screenSize, fragPos, bias);
+	result += calculateAO(normal, vec2(-randomVec.y,randomVec.x), screenSize, fragPos, bias);
+	result += calculateAO(normal, vec2(randomVec.y, -randomVec.x), screenSize, fragPos, bias);
+	
+	result.x /= result.y;
+
+	float darknessFactor = 1.2; 
+    result.x *= darknessFactor;
+	
+	FragColor = 1 - result.x;
+	
 }

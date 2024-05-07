@@ -19,6 +19,9 @@ const float PITCH = 0.0f;
 const float SPEED = 30.0f;
 const float SENSITIVITY = 0.1f;
 const float ZOOM = 45.0f;
+const float NEAR_PLANE = 0.1f; 
+const float FAR_PLANE = 100.0f;
+
 
 
 // An abstract camera class that processes input and calculates the corresponding Euler Angles, Vectors and Matrices for use in OpenGL
@@ -38,9 +41,17 @@ public:
     float MovementSpeed;
     float MouseSensitivity;
     float Zoom;
+    float NearPlane;
+    float FarPlane;
 
     // constructor with vectors
-    Camera(glm::vec3 position = glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f), float yaw = YAW, float pitch = PITCH) : Front(glm::vec3(0.0f, 0.0f, -1.0f)), MovementSpeed(SPEED), MouseSensitivity(SENSITIVITY), Zoom(ZOOM)
+    Camera(glm::vec3 position = glm::vec3(0.0f, 0.0f, 0.0f),
+        glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f),
+        float yaw = YAW, float pitch = PITCH,
+        float nearPlane = NEAR_PLANE, float farPlane = FAR_PLANE) : 
+        Front(glm::vec3(0.0f, 0.0f, -1.0f)),
+        MovementSpeed(SPEED), MouseSensitivity(SENSITIVITY), Zoom(ZOOM),
+        NearPlane(nearPlane), FarPlane(farPlane)
     {
         Position = position;
         WorldUp = up;
@@ -62,6 +73,14 @@ public:
     glm::mat4 GetViewMatrix()
     {
         return glm::lookAt(Position, Position + Front, Up);
+    }
+
+    float getNear() const {
+        return NearPlane;
+    }
+
+    float getFar() const {
+        return FarPlane;
     }
 
     // processes input received from any keyboard-like input system. Accepts input parameter in the form of camera defined ENUM (to abstract it from windowing systems)
@@ -110,7 +129,7 @@ public:
             Zoom = 45.0f;
     }
 
-private:
+//private:
     // calculates the front vector from the Camera's (updated) Euler Angles
     void updateCameraVectors()
     {

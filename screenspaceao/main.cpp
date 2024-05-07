@@ -5,12 +5,13 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-#include <C:/Users/SupaSahil Admin/Dissertation/screenspaceao/screenspaceao/shader_s.h>
-#include <C:/Users/SupaSahil Admin/Dissertation/screenspaceao/screenspaceao/camera.h>
-#include <C:/Users/SupaSahil Admin/Dissertation/screenspaceao/screenspaceao/model.h>
+#include <C:/Users/Admin/Dissertation/screenspaceao/screenspaceao/shader_s.h>
+#include <C:/Users/Admin/Dissertation/screenspaceao/screenspaceao/camera.h>
+#include <C:/Users/Admin/Dissertation/screenspaceao/screenspaceao/model.h>
 
 #include <iostream>
 #include <random>
+#include <fstream>
 
 #include "imgui/imgui.h"
 #include "imgui/imgui_impl_glfw.h"
@@ -20,9 +21,9 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 void processInput(GLFWwindow* window);
-unsigned int loadTexture(const char* path, bool gammaCorrection);
+
 void renderQuad();
-void renderCube();
+
 
 // settings
 const unsigned int SCR_WIDTH = 800;
@@ -33,14 +34,58 @@ Camera camera(glm::vec3(0.0f, 0.0f, 0.0f));
 float lastX = (float)SCR_WIDTH / 2.0;
 float lastY = (float)SCR_HEIGHT / 2.0;
 bool firstMouse = true;
+bool cameraEnabled = true;
 
-// timing
-float deltaTime = 0.0f;
-float lastFrame = 0.0f;
+// struct for camera presets for testing
+struct CameraPreset {
+    glm::vec3 position;
+    glm::vec3 lookAt; 
+    float yaw;
+    float pitch;
+    float zoom;
+};
 
-float ourLerp(float a, float b, float f)
-{
-    return a + f * (b - a);
+// setup preset camera angles for testing
+std::vector<CameraPreset> cameraPresets;
+
+// manual values for angles that show off differences in AO
+void initializeCameraPresets() {
+    cameraPresets.push_back({ glm::vec3(97.6318f, 25.6399f, -20.6731f), glm::vec3(0.0f, 0.0f, 0.0f), 24.5001f, -9.90001f, 45.0f });
+    cameraPresets.push_back({ glm::vec3(-131.494f, 26.2515f, 4.82874f), glm::vec3(0.0f, 0.0f, 0.0f), 350.9f, 3.79998f, 45.0f });
+    cameraPresets.push_back({ glm::vec3(33.8566f, 16.6878f, -3.60557f), glm::vec3(0.0f, 0.0f, 0.0f), 312.9f, -8.20003f, 45.0f });
+    cameraPresets.push_back({ glm::vec3(-94.2336f, 65.0085f, 18.673f), glm::vec3(0.0f, 0.0f, 0.0f), 333.496f, -12.9f, 45.0f });
+}
+
+int currentPresetIndex = 0;
+
+void switchCameraPreset(Camera& camera) {
+    currentPresetIndex = (currentPresetIndex + 1) % cameraPresets.size();
+    std::cout << "Switching to camera preset index: " << currentPresetIndex << std::endl;
+
+    const CameraPreset& preset = cameraPresets[currentPresetIndex];
+    camera.Position = preset.position;
+    camera.Yaw = preset.yaw;
+    camera.Pitch = preset.pitch;
+    camera.Zoom = preset.zoom;
+
+    camera.updateCameraVectors();
+}
+
+// logs the current state of the camera
+void logCameraState(const Camera& camera) {
+    std::ofstream logFile("camera_presets.log", std::ios::app);
+    if (logFile.is_open()) {
+        logFile << "Camera Preset: \n"
+            << "Position: " << camera.Position.x << ", " << camera.Position.y << ", " << camera.Position.z << "\n"
+            << "Yaw: " << camera.Yaw << "\n"
+            << "Pitch: " << camera.Pitch << "\n"
+            << "Zoom: " << camera.Zoom << "\n\n";
+        logFile.close();
+        std::cout << "Camera state logged to camera_presets.log" << std::endl;
+    }
+    else {
+        std::cerr << "Unable to open log file." << std::endl;
+    }
 }
 
 // toggles
@@ -50,10 +95,77 @@ bool enableHBAO = false;
 bool enableTextures = true;
 
 
+// logging of FPS test
+bool isTesting = false;
+int currentAOSetting = 0; // 0 = SSAO, 1 = HBAO, 2 = No AO
+float testDuration = 5.0f; // Test each AO for 5 seconds
+float elapsedTime = 0.0f; // Timer to keep track of elapsed time per setting
+
+int frameCount = 0; // Count number of frames in 5 seconds
+float fpsSum = 0.0f; // Sum the frames to be averaged later
+
+// function to switch between AOs
+void applyAOSetting(int setting) {
+    enableSSAO = (setting == 0);
+    enableHBAO = (setting == 1);
+    if (setting == 2) {
+        enableSSAO = false;
+        enableHBAO = false;
+    }
+}
+
+// Testing function runs through each camera and measures fps for each AO for 5 seconds
+void updateTesting(float deltaTime) {
+    if (!isTesting) return;
+
+    elapsedTime += deltaTime;
+    fpsSum += 1.0f / deltaTime; // Accumulate FPS
+    frameCount++;
+
+    // Check if the current test duration has elapsed
+    if (elapsedTime >= testDuration) {
+        float avgFPS = fpsSum / frameCount;
+        std::cout << "Camera Preset " << currentPresetIndex << ", AO Setting " << currentAOSetting << ": " << avgFPS << std::endl;
+
+        // Reset timers and counters for the next test
+        elapsedTime = 0.0f;
+        fpsSum = 0.0f;
+        frameCount = 0;
+
+        // Move to the next AO setting
+        currentAOSetting++;
+        if (currentAOSetting > 2) {
+            currentAOSetting = 0;
+
+            if (currentPresetIndex >= cameraPresets.size()-1) {
+                isTesting = false;
+                std::cout << "All tests complete." << std::endl;
+                return;
+            }
+            switchCameraPreset(camera);
+        }
+
+        // Apply the current AO setting for the new preset or after resetting AO settings
+        applyAOSetting(currentAOSetting);
+    }
+}
+
+
+// timing
+float deltaTime = 0.0f;
+float lastFrame = 0.0f;
+
+// linearly interpolates between two values `a` and `b` based on the fraction `f`
+float ourLerp(float a, float b, float f)
+{
+    return a + f * (b - a);
+}
+
+
+
 int main()
 {
     // glfw: initialize and configure
-    // ------------------------------
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -64,7 +176,6 @@ int main()
 #endif
 
     // glfw window creation
-    // --------------------
     GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "LearnOpenGL", NULL, NULL);
     if (window == NULL)
     {
@@ -80,8 +191,11 @@ int main()
     // tell GLFW to capture our mouse
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
+    // uncap fps
+    glfwSwapInterval(0);
+
+
     // glad: load all OpenGL function pointers
-    // ---------------------------------------
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
     {
         std::cout << "Failed to initialize GLAD" << std::endl;
@@ -89,11 +203,9 @@ int main()
     }
 
     // configure global opengl state
-    // -----------------------------
     glEnable(GL_DEPTH_TEST);
 
     // build and compile shaders
-    // -------------------------
     Shader shaderGeometryPass("ssao_geometry.vs", "ssao_geometry.fs");
     Shader shaderLightingPass("ssao.vs", "ssao_lighting.fs");
     Shader shaderSSAO("ssao.vs", "ssao.fs");
@@ -104,12 +216,10 @@ int main()
 
 
     // load models
-    // -----------
-    string modelPath = "C:/Users/SupaSahil Admin/Dissertation/screenspaceao/screenspaceao/crytek_sponza/sponza.obj";
-    Model backpack(modelPath);
+    string modelPath = "C:/Users/Admin/Dissertation/screenspaceao/screenspaceao/crytek_sponza/sponza.obj";
+    Model sponzaModel(modelPath);
 
     // configure g-buffer framebuffer
-    // ------------------------------
     unsigned int gBuffer;
     glGenFramebuffers(1, &gBuffer);
     glBindFramebuffer(GL_FRAMEBUFFER, gBuffer);
@@ -151,8 +261,7 @@ int main()
         std::cout << "Framebuffer not complete!" << std::endl;
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-    // also create framebuffer to hold SSAO processing stage 
-    // -----------------------------------------------------
+    // create framebuffer to hold SSAO processing stage 
     unsigned int ssaoFBO, ssaoBlurFBO;
     glGenFramebuffers(1, &ssaoFBO);  glGenFramebuffers(1, &ssaoBlurFBO);
     glBindFramebuffer(GL_FRAMEBUFFER, ssaoFBO);
@@ -166,7 +275,7 @@ int main()
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ssaoColorBuffer, 0);
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
         std::cout << "SSAO Framebuffer not complete!" << std::endl;
-    // and blur stage
+    // blur stage
     glBindFramebuffer(GL_FRAMEBUFFER, ssaoBlurFBO);
     glGenTextures(1, &ssaoColorBufferBlur);
     glBindTexture(GL_TEXTURE_2D, ssaoColorBufferBlur);
@@ -178,8 +287,8 @@ int main()
         std::cout << "SSAO Blur Framebuffer not complete!" << std::endl;
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-    // also create framebuffer to hold HBAO processing stage
-    // -----------------------------------------------------
+    // create framebuffer to hold HBAO processing stage
+
     unsigned int hbaoFBO, hbaoBlurFBO;
     glGenFramebuffers(1, &hbaoFBO);
     glGenFramebuffers(1, &hbaoBlurFBO);
@@ -209,48 +318,20 @@ int main()
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     // generate ssao sample kernel
-    // ----------------------
     std::uniform_real_distribution<GLfloat> randomFloats(0.0, 1.0); // generates random floats between 0.0 and 1.0
     std::default_random_engine generator;
     std::vector<glm::vec3> ssaoKernel;
-    for (unsigned int i = 0; i < 64; ++i)
+    for (unsigned int i = 0; i < 16; ++i)
     {
         glm::vec3 sample(randomFloats(generator) * 2.0 - 1.0, randomFloats(generator) * 2.0 - 1.0, randomFloats(generator));
         sample = glm::normalize(sample);
         sample *= randomFloats(generator);
-        float scale = float(i) / 64.0f;
+        float scale = float(i) / 16.0f;
 
         // scale samples s.t. they're more aligned to center of kernel
         scale = ourLerp(0.1f, 1.0f, scale * scale);
         sample *= scale;
         ssaoKernel.push_back(sample);
-    }
-
-    //generate hbao sample kernel
-    // -------------------------
-    // Kernel size for HBAO, this should be a reasonably large number
-    // for the quality of HBAO, for example, 32 or 64.
-    unsigned int hbaoKernelSize = 64; // Adjust as needed
-
-    std::vector<glm::vec3> hbaoKernel;
-    hbaoKernel.reserve(hbaoKernelSize); // Reserve the memory to avoid reallocations
-
-    for (unsigned int i = 0; i < hbaoKernelSize; ++i) {
-        glm::vec3 sample(
-            randomFloats(generator) * 2.0f - 1.0f, // X-axis: [-1, 1]
-            randomFloats(generator) * 2.0f - 1.0f, // Y-axis: [-1, 1]
-            randomFloats(generator)                  // Z-axis: [0, 1]
-        );
-
-        sample = glm::normalize(sample);
-        sample *= randomFloats(generator); // Varying the length
-
-        // Scale samples, biasing toward the origin
-        float scale = static_cast<float>(i) / static_cast<float>(hbaoKernelSize);
-        scale = ourLerp(0.1f, 1.0f, scale * scale);
-        sample *= scale;
-
-        hbaoKernel.push_back(sample);
     }
 
     // generate ssao noise texture
@@ -366,27 +447,39 @@ int main()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
+    // For HBAO
+    float u_AORadius = 500000.f;
+    float u_AOBias = 0.f;
+    int u_AOSamples = 4;
+
+    // For SSAO
+    int ss_kernelSize = 16;
+    float ss_radius = 1.3f;
+    float ss_bias = 0.025f;
+
+    // Initialize camera presets
+    initializeCameraPresets();
+
     // render loop
-    // -----------
     while (!glfwWindowShouldClose(window))
     {
         // per-frame time logic
-        // --------------------
         float currentFrame = static_cast<float>(glfwGetTime());
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
 
         // input
-        // -----
         processInput(window);
 
-        // render
-        // ------
+
+        updateTesting(deltaTime); // Update AO testing status
+
+
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // 1. geometry pass: render scene's geometry/color data into gbuffer
-        // -----------------------------------------------------------------
+
+        // geometry pass
         glBindFramebuffer(GL_FRAMEBUFFER, gBuffer);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 1000.0f);
@@ -397,28 +490,28 @@ int main()
             shaderGeometryPass.setMat4("projection", projection);
             shaderGeometryPass.setMat4("view", view);
             
-            // backpack model on the floor
             model = glm::mat4(1.0f);
             model = glm::translate(model, glm::vec3(0.0f, 0.5f, 0.0));
-            //model = glm::rotate(model, glm::radians(-90.0f), glm::vec3(1.0, 0.0, 0.0));
             model = glm::scale(model, glm::vec3(0.1f));
             shaderGeometryPass.setMat4("model", model);
-            //shaderGeometryPass.setInt("textureDiffuse1", 0);
 
-            backpack.Draw(shaderGeometryPass);
+            sponzaModel.Draw(shaderGeometryPass);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 
-        // 2. generate SSAO texture
-        // ------------------------
+        // generate SSAO texture
+
         if (enableSSAO) {
             glBindFramebuffer(GL_FRAMEBUFFER, ssaoFBO);
                 glClear(GL_COLOR_BUFFER_BIT);
                 shaderSSAO.use();
                 // Send kernel + rotation 
-                for (unsigned int i = 0; i < 64; ++i)
+                for (unsigned int i = 0; i < 16; ++i)
                     shaderSSAO.setVec3("samples[" + std::to_string(i) + "]", ssaoKernel[i]);
                 shaderSSAO.setMat4("projection", projection);
+                shaderSSAO.setInt("kernelSize", ss_kernelSize);
+                shaderSSAO.setFloat("radius", ss_radius);
+                shaderSSAO.setFloat("bias", ss_bias);
                 glActiveTexture(GL_TEXTURE0);
                 glBindTexture(GL_TEXTURE_2D, gPosition);
                 glActiveTexture(GL_TEXTURE1);
@@ -430,8 +523,7 @@ int main()
 
         }
 
-        // 3. blur SSAO texture to remove noise
-        // ------------------------------------
+        // blur SSAO texture to remove noise
         if (enableSSAO){
             glBindFramebuffer(GL_FRAMEBUFFER, ssaoBlurFBO);
                 glClear(GL_COLOR_BUFFER_BIT);
@@ -442,21 +534,20 @@ int main()
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
         }
         
-        // 2b. generate HBAO texture
-        // ------------------------
+        // generate HBAO texture
 
         if (enableHBAO) {
             glBindFramebuffer(GL_FRAMEBUFFER, hbaoFBO); // Use a dedicated FBO for HBAO if required
             glClear(GL_COLOR_BUFFER_BIT);
             shaderHBAO.use(); // Make sure to use the HBAO shader program
 
-            // Send HBAO samples (ensure hbaoKernel is the correct array of vec3 values)
-            for (unsigned int i = 0; i < hbaoKernel.size(); ++i)
-                shaderHBAO.setVec3("samples[" + std::to_string(i) + "]", hbaoKernel[i]);
 
             // Set HBAO specific uniforms
-            shaderHBAO.setMat4("invProjection", glm::inverse(projection)); // Set inverse projection matrix
-            // ...set other HBAO-specific uniforms as needed...
+            shaderHBAO.setMat4("projection", projection); // Set the projection matrix
+            shaderHBAO.setMat4("view", view); 
+            shaderHBAO.setFloat("u_AORadius", u_AORadius);
+            shaderHBAO.setFloat("u_AOBias", u_AOBias);
+            shaderHBAO.setInt("u_AOSamples", u_AOSamples);
 
             // Bind necessary textures
             glActiveTexture(GL_TEXTURE0);
@@ -472,8 +563,8 @@ int main()
 
             glBindFramebuffer(GL_FRAMEBUFFER, 0); // Unbind the framebuffer
         }
-        // 3b. blur HBAO texture to remove noise
-        // ------------------------------------
+        //  blur HBAO texture to remove noise
+        
         if (enableHBAO) {
             glBindFramebuffer(GL_FRAMEBUFFER, hbaoBlurFBO); // Use the HBAO blur framebuffer
             glClear(GL_COLOR_BUFFER_BIT);
@@ -485,12 +576,11 @@ int main()
         }
         
         
-        // 4. lighting pass: traditional deferred Blinn-Phong lighting with added screen-space ambient occlusion
-        // -----------------------------------------------------------------------------------------------------
+        //  lighting pass
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         shaderLightingPass.use();
         shaderLightingPass.setMat4("invView", glm::inverse(camera.GetViewMatrix()));
-        glm::vec3 camPosition = camera.Position; // Assuming you have a Camera object named "camera"
+        glm::vec3 camPosition = camera.Position; 
         shaderLightingPass.setVec3("viewPos", camPosition);
 
 
@@ -511,9 +601,6 @@ int main()
         glActiveTexture(GL_TEXTURE2);
         glBindTexture(GL_TEXTURE_2D, gAlbedo);
 
-
-        // Set the 'useSSAO' uniform and bind the appropriate SSAO texture
-        //shaderLightingPass.setBool("useSSAO", enableSSAO); // Set the SSAO use flag
 
         glActiveTexture(GL_TEXTURE3); // Texture unit 3 is for SSAO texture
         
@@ -547,22 +634,40 @@ int main()
             fps++;
             if (currentTime - lastTime >= 1.0f) {
                 lastTime = currentTime;
-                static std::string title = "LearnOpenGL (FPS: " + std::to_string(static_cast<int>(fps)) + ")";
+                static std::string title = "(FPS: " + std::to_string(static_cast<int>(fps)) + ")";
                 glfwSetWindowTitle(window, title.c_str());
                 fps = 0;
             }
 
             // Render an ImGui window to display information
-            ImGui::Begin("Performance and Settings"); // Create a window with a new title
-            ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate); // Display the calculated FPS
-            ImGui::Checkbox("Enable SSAO (SPACEBAR)", &enableSSAO); // 'enableSSAO' is your global or context variable tracking SSAO state
-            ImGui::Checkbox("Enable HBAO (H)", &enableHBAO); // 'enableSSAO' is your global or context variable tracking SSAO state
-            ImGui::Checkbox("Enable Texture(T)", &enableTextures); // 'enableSSAO' is your global or context variable tracking SSAO state
-            glm::vec3 camPos = camera.Position; // Assuming you have a Camera object named "camera"
-            ImGui::Text("Camera Position:"); // Display a label
-            ImGui::Text("X: %.2f", camPos.x); // Display the X component
-            ImGui::Text("Y: %.2f", camPos.y); // Display the Y component
-            ImGui::Text("Z: %.2f", camPos.z); // Display the Z component
+            ImGui::Begin("Performance and Settings"); 
+            ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate); 
+            ImGui::Checkbox("Enable SSAO (SPACEBAR)", &enableSSAO); 
+            ImGui::Checkbox("Enable HBAO (H)", &enableHBAO); 
+            ImGui::Checkbox("Enable Texture(T)", &enableTextures); 
+            glm::vec3 camPos = camera.Position; 
+            ImGui::Text("Camera Position:"); 
+            ImGui::Text("X: %.2f", camPos.x); 
+            ImGui::Text("Y: %.2f", camPos.y); 
+            ImGui::Text("Z: %.2f", camPos.z); 
+            
+            // SLIDERS HBAO
+            ImGui::SliderFloat("HBAO Radius", &u_AORadius, 0.0f, 1000000.0f);
+            ImGui::SliderFloat("HBAO Bias", &u_AOBias, 0.0f, 40.0f);
+
+            // SLIDERS SSAO
+            ImGui::SliderFloat("SSAO radius", &ss_radius, 0.0f, 100.f);
+            ImGui::SliderFloat("SSAO bias", &ss_bias, 0.f, 1.f);
+
+            // Pass updated values to the shader
+            shaderHBAO.use();
+            shaderHBAO.setFloat("u_AORadius", u_AORadius);
+            shaderHBAO.setFloat("u_AOBias", u_AOBias);
+
+            shaderSSAO.use();
+            shaderSSAO.setFloat("radius", ss_radius);
+            shaderSSAO.setFloat("bias", ss_bias);
+
 
             ImGui::End();
 
@@ -571,14 +676,13 @@ int main()
         }
         
 
-        // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
-        // -------------------------------------------------------------------------------
+        // glfw swap buffers and poll IO events 
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
 
     // shutdown imgui
-    // --------------
+
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
@@ -586,81 +690,6 @@ int main()
 
     glfwTerminate();
     return 0;
-}
-
-// renderCube() renders a 1x1 3D cube in NDC.
-// -------------------------------------------------
-unsigned int cubeVAO = 0;
-unsigned int cubeVBO = 0;
-void renderCube()
-{
-    // initialize (if necessary)
-    if (cubeVAO == 0)
-    {
-        float vertices[] = {
-            // back face
-            -1.0f, -1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 0.0f, 0.0f, // bottom-left
-             1.0f,  1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 1.0f, 1.0f, // top-right
-             1.0f, -1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 1.0f, 0.0f, // bottom-right         
-             1.0f,  1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 1.0f, 1.0f, // top-right
-            -1.0f, -1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 0.0f, 0.0f, // bottom-left
-            -1.0f,  1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 0.0f, 1.0f, // top-left
-            // front face
-            -1.0f, -1.0f,  1.0f,  0.0f,  0.0f,  1.0f, 0.0f, 0.0f, // bottom-left
-             1.0f, -1.0f,  1.0f,  0.0f,  0.0f,  1.0f, 1.0f, 0.0f, // bottom-right
-             1.0f,  1.0f,  1.0f,  0.0f,  0.0f,  1.0f, 1.0f, 1.0f, // top-right
-             1.0f,  1.0f,  1.0f,  0.0f,  0.0f,  1.0f, 1.0f, 1.0f, // top-right
-            -1.0f,  1.0f,  1.0f,  0.0f,  0.0f,  1.0f, 0.0f, 1.0f, // top-left
-            -1.0f, -1.0f,  1.0f,  0.0f,  0.0f,  1.0f, 0.0f, 0.0f, // bottom-left
-            // left face
-            -1.0f,  1.0f,  1.0f, -1.0f,  0.0f,  0.0f, 1.0f, 0.0f, // top-right
-            -1.0f,  1.0f, -1.0f, -1.0f,  0.0f,  0.0f, 1.0f, 1.0f, // top-left
-            -1.0f, -1.0f, -1.0f, -1.0f,  0.0f,  0.0f, 0.0f, 1.0f, // bottom-left
-            -1.0f, -1.0f, -1.0f, -1.0f,  0.0f,  0.0f, 0.0f, 1.0f, // bottom-left
-            -1.0f, -1.0f,  1.0f, -1.0f,  0.0f,  0.0f, 0.0f, 0.0f, // bottom-right
-            -1.0f,  1.0f,  1.0f, -1.0f,  0.0f,  0.0f, 1.0f, 0.0f, // top-right
-            // right face
-             1.0f,  1.0f,  1.0f,  1.0f,  0.0f,  0.0f, 1.0f, 0.0f, // top-left
-             1.0f, -1.0f, -1.0f,  1.0f,  0.0f,  0.0f, 0.0f, 1.0f, // bottom-right
-             1.0f,  1.0f, -1.0f,  1.0f,  0.0f,  0.0f, 1.0f, 1.0f, // top-right         
-             1.0f, -1.0f, -1.0f,  1.0f,  0.0f,  0.0f, 0.0f, 1.0f, // bottom-right
-             1.0f,  1.0f,  1.0f,  1.0f,  0.0f,  0.0f, 1.0f, 0.0f, // top-left
-             1.0f, -1.0f,  1.0f,  1.0f,  0.0f,  0.0f, 0.0f, 0.0f, // bottom-left     
-             // bottom face
-             -1.0f, -1.0f, -1.0f,  0.0f, -1.0f,  0.0f, 0.0f, 1.0f, // top-right
-              1.0f, -1.0f, -1.0f,  0.0f, -1.0f,  0.0f, 1.0f, 1.0f, // top-left
-              1.0f, -1.0f,  1.0f,  0.0f, -1.0f,  0.0f, 1.0f, 0.0f, // bottom-left
-              1.0f, -1.0f,  1.0f,  0.0f, -1.0f,  0.0f, 1.0f, 0.0f, // bottom-left
-             -1.0f, -1.0f,  1.0f,  0.0f, -1.0f,  0.0f, 0.0f, 0.0f, // bottom-right
-             -1.0f, -1.0f, -1.0f,  0.0f, -1.0f,  0.0f, 0.0f, 1.0f, // top-right
-             // top face
-             -1.0f,  1.0f, -1.0f,  0.0f,  1.0f,  0.0f, 0.0f, 1.0f, // top-left
-              1.0f,  1.0f , 1.0f,  0.0f,  1.0f,  0.0f, 1.0f, 0.0f, // bottom-right
-              1.0f,  1.0f, -1.0f,  0.0f,  1.0f,  0.0f, 1.0f, 1.0f, // top-right     
-              1.0f,  1.0f,  1.0f,  0.0f,  1.0f,  0.0f, 1.0f, 0.0f, // bottom-right
-             -1.0f,  1.0f, -1.0f,  0.0f,  1.0f,  0.0f, 0.0f, 1.0f, // top-left
-             -1.0f,  1.0f,  1.0f,  0.0f,  1.0f,  0.0f, 0.0f, 0.0f  // bottom-left        
-        };
-        glGenVertexArrays(1, &cubeVAO);
-        glGenBuffers(1, &cubeVBO);
-        // fill buffer
-        glBindBuffer(GL_ARRAY_BUFFER, cubeVBO);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-        // link vertex attributes
-        glBindVertexArray(cubeVAO);
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
-        glEnableVertexAttribArray(1);
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
-        glEnableVertexAttribArray(2);
-        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-        glBindVertexArray(0);
-    }
-    // render Cube
-    glBindVertexArray(cubeVAO);
-    glDrawArrays(GL_TRIANGLES, 0, 36);
-    glBindVertexArray(0);
 }
 
 
@@ -696,7 +725,6 @@ void renderQuad()
 }
 
 // process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
-// ---------------------------------------------------------------------------------------------------------
 void processInput(GLFWwindow* window)
 {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
@@ -759,19 +787,84 @@ void processInput(GLFWwindow* window)
         showGui = !showGui;
         glfwWaitEventsTimeout(0.2); // Debounce to avoid flipping visibility state too quickly
     }
+    
+
+
+    // Check if 'T' is pressed and it was not already pressed
+    static bool cPressed = false;
+
+    if (glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS && !cPressed) {
+        // Get the current cursor mode
+        int cursorMode = glfwGetInputMode(window, GLFW_CURSOR);
+
+        // Toggle cursor mode based on current state
+        if (cursorMode == GLFW_CURSOR_NORMAL) {
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+            cameraEnabled = true;
+        }
+        else {
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+            cameraEnabled = false;
+        }
+
+        cPressed = true; // Mark as pressed
+    }
+
+  
+    if (glfwGetKey(window, GLFW_KEY_C) == GLFW_RELEASE) {
+        cPressed = false; 
+    }
+
+    static bool zPressed = false;
+    if (glfwGetKey(window, GLFW_KEY_Z) == GLFW_PRESS && !zPressed) {
+        switchCameraPreset(camera);
+        zPressed = true;
+    }
+
+    if (glfwGetKey(window, GLFW_KEY_Z) == GLFW_RELEASE) {
+        zPressed = false; 
+    }
+
+    static bool lPressed = false;
+    if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
+        static bool lPressed = false;
+        if (!lPressed) {
+            logCameraState(camera);
+            lPressed = true;
+        }
+    }
+    if (glfwGetKey(window, GLFW_KEY_L) == GLFW_RELEASE) {
+        lPressed = false;
+    }
+
+    static bool kPressed = false;
+    if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS && !kPressed) {
+        isTesting = true; 
+        currentPresetIndex = -1;
+        currentAOSetting = 0;
+        elapsedTime = 0.0f;
+        fpsSum = 0.0f;
+        frameCount = 0;
+        kPressed = true; 
+
+        switchCameraPreset(camera); 
+        applyAOSetting(currentAOSetting); 
+    }
+
+    if (glfwGetKey(window, GLFW_KEY_K) == GLFW_RELEASE) {
+        kPressed = false; 
+    }
+
 }
 
-// glfw: whenever the window size changed (by OS or user resize) this callback function executes
-// ---------------------------------------------------------------------------------------------
+// glfw whenever the window size changed (by OS or user resize) this callback function executes
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
-    // make sure the viewport matches the new window dimensions; note that width and 
-    // height will be significantly larger than specified on retina displays.
+
     glViewport(0, 0, width, height);
 }
 
-// glfw: whenever the mouse moves, this callback is called
-// -------------------------------------------------------
+// glfw whenever the mouse moves, this callback is called
 void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
 {
     float xpos = static_cast<float>(xposIn);
@@ -783,17 +876,24 @@ void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
         firstMouse = false;
     }
 
-    float xoffset = xpos - lastX;
-    float yoffset = lastY - ypos; // reversed since y-coordinates go from bottom to top
+    if (cameraEnabled) 
+    {
+        float xoffset = xpos - lastX;
+        float yoffset = lastY - ypos; 
 
-    lastX = xpos;
-    lastY = ypos;
+        lastX = xpos;
+        lastY = ypos;
 
-    camera.ProcessMouseMovement(xoffset, yoffset);
+        camera.ProcessMouseMovement(xoffset, yoffset);
+    }
+    else
+    {
+        lastX = xpos;
+        lastY = ypos;
+    }
 }
 
-// glfw: whenever the mouse scroll wheel scrolls, this callback is called
-// ----------------------------------------------------------------------
+// glfw whenever the mouse scroll wheel scrolls, this callback is called
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 {
     camera.ProcessMouseScroll(static_cast<float>(yoffset));

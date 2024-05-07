@@ -7,20 +7,19 @@ uniform sampler2D gPosition;
 uniform sampler2D gNormal;
 uniform sampler2D texNoise;
 
-uniform bool useSSAO; // Uniform to control whether to use SSAO
 
-uniform vec3 samples[64];
+uniform vec3 samples[16];
 
-// parameters (you'd probably want to use them as uniforms to more easily tweak the effect)
-int kernelSize = 64;
-float radius = 0.5;
-float bias = 0.025;
+// parameters 
+uniform int kernelSize = 16;
+uniform float radius = 1.3f;
+uniform float bias = 0.025f;
 
 // tile noise texture over screen based on screen dimensions divided by noise size
 const vec2 noiseScale = vec2(800.0/4.0, 600.0/4.0);
 
 uniform mat4 projection;
-
+ 
 void main()
 {
 

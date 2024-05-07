@@ -10,8 +10,8 @@
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 
-#include <C:/Users/SupaSahil Admin/Dissertation/screenspaceao/screenspaceao/mesh.h>
-#include <C:/Users/SupaSahil Admin/Dissertation/screenspaceao/screenspaceao/shader_s.h>
+#include <C:/Users/Admin/Dissertation/screenspaceao/screenspaceao/mesh.h>
+#include <C:/Users/Admin/Dissertation/screenspaceao/screenspaceao/shader_s.h>
 
 #include <string>
 #include <fstream>

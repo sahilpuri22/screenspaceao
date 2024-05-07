@@ -71,8 +71,8 @@
     <None Include="ssao.fs" />
     <None Include="ssao_blur.fs" />
     <None Include="hbao.vs" />
-    <None Include="hbao.fs" />
     <None Include="hbao_blur.fs" />
+    <None Include="hbao.fs" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="container.jpg">

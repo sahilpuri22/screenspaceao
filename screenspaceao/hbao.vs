@@ -6,5 +6,5 @@ out vec2 TexCoords;
 
 void main() {
     TexCoords = aTexCoords;
-    gl_Position = vec4(aPos, 0.0, 1.0); // Positions should already be in normalized device coordinates
+    gl_Position = vec4(aPos, 0.0, 1.0); 
 }

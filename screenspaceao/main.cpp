@@ -92,6 +92,7 @@ void logCameraState(const Camera& camera) {
 bool showGui = true;
 bool enableSSAO = true;
 bool enableHBAO = false;
+bool enableALCHAO = false;
 bool enableTextures = true;
 
 
@@ -108,6 +109,7 @@ float fpsSum = 0.0f; // Sum the frames to be averaged later
 void applyAOSetting(int setting) {
     enableSSAO = (setting == 0);
     enableHBAO = (setting == 1);
+    enableALCHAO = (setting == 2);
     if (setting == 2) {
         enableSSAO = false;
         enableHBAO = false;
@@ -208,12 +210,15 @@ int main()
     // build and compile shaders
     Shader shaderGeometryPass("ssao_geometry.vs", "ssao_geometry.fs");
     Shader shaderLightingPass("ssao.vs", "ssao_lighting.fs");
+
     Shader shaderSSAO("ssao.vs", "ssao.fs");
     Shader shaderSSAOBlur("ssao.vs", "ssao_blur.fs");
 
     Shader shaderHBAO("hbao.vs", "hbao.fs");
     Shader shaderHBAOBlur("hbao.vs", "hbao_blur.fs");
 
+    Shader shaderALCHAO("ssao.vs", "ssao_alch.fs");
+    Shader shaderALCHAOBlur("ssao.vs", "ssao_blur.fs");
 
     // load models
     string modelPath = "C:/Users/Admin/Dissertation/screenspaceao/screenspaceao/crytek_sponza/sponza.obj";
@@ -315,6 +320,35 @@ int main()
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, hbaoColorBufferBlur, 0);
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
         std::cout << "HBAO Blur Framebuffer not complete!" << std::endl;
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    // create framebuffer to hold SSAOALCH processing stage
+    unsigned int alchaoFBO, alchaoBlurFBO;
+    glGenFramebuffers(1, &alchaoFBO);
+    glGenFramebuffers(1, &alchaoBlurFBO);
+    glBindFramebuffer(GL_FRAMEBUFFER, alchaoFBO);
+    unsigned int alchaoColorBuffer, alchaoColorBufferBlur;
+
+    // ALCHAO color buffer
+    glGenTextures(1, &alchaoColorBuffer);
+    glBindTexture(GL_TEXTURE_2D, alchaoColorBuffer);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, SCR_WIDTH, SCR_HEIGHT, 0, GL_RED, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, alchaoColorBuffer, 0);
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        std::cout << "ALCHAO Framebuffer not complete!" << std::endl;
+
+    // HBAO blur stage
+    glBindFramebuffer(GL_FRAMEBUFFER, alchaoBlurFBO);
+    glGenTextures(1, &alchaoColorBufferBlur);
+    glBindTexture(GL_TEXTURE_2D, alchaoColorBufferBlur);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, SCR_WIDTH, SCR_HEIGHT, 0, GL_RED, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, alchaoColorBufferBlur, 0);
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        std::cout << "ALCHAO Blur Framebuffer not complete!" << std::endl;
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     // generate ssao sample kernel
@@ -430,6 +464,12 @@ int main()
     shaderHBAO.setInt("texNoise", 2);
     shaderHBAOBlur.use();
     shaderHBAOBlur.setInt("hbaoInput", 0);
+    shaderALCHAO.use();
+    shaderALCHAO.setInt("gPosition", 0);
+    shaderALCHAO.setInt("gNormal", 1);
+    shaderALCHAO.setInt("texNoise", 2);
+    shaderALCHAOBlur.use();
+    shaderALCHAOBlur.setInt("ssaoInput", 0);
 
 
     // initialize imgui
@@ -456,6 +496,14 @@ int main()
     int ss_kernelSize = 16;
     float ss_radius = 1.3f;
     float ss_bias = 0.025f;
+
+    // For ALCHAO
+    int al_kernelSize = 16;
+    float al_radius = 2.0f;
+    float al_bias = 0.025f;
+    float sigma = 0.004f;
+    int k = 1;
+    float beta = 0.5f;
 
     // Initialize camera presets
     initializeCameraPresets();
@@ -575,6 +623,44 @@ int main()
             glBindFramebuffer(GL_FRAMEBUFFER, 0); // Unbind the framebuffer when done
         }
         
+
+        // generate ALCHAO texture
+
+        if (enableALCHAO) {
+            glBindFramebuffer(GL_FRAMEBUFFER, alchaoFBO);
+            glClear(GL_COLOR_BUFFER_BIT);
+            shaderALCHAO.use();
+            // Send kernel + rotation 
+            for (unsigned int i = 0; i < 16; ++i)
+                shaderALCHAO.setVec3("samples[" + std::to_string(i) + "]", ssaoKernel[i]);
+            shaderALCHAO.setMat4("projection", projection);
+            shaderALCHAO.setInt("kernelSize", al_kernelSize);
+            shaderALCHAO.setFloat("radius", al_radius);
+            shaderALCHAO.setFloat("bias", al_bias);
+            shaderALCHAO.setFloat("sigma", sigma);
+            shaderALCHAO.setInt("k", k);
+            shaderALCHAO.setFloat("beta", beta);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, gPosition);
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(GL_TEXTURE_2D, gNormal);
+            glActiveTexture(GL_TEXTURE2);
+            glBindTexture(GL_TEXTURE_2D, noiseTexture);
+            renderQuad();
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        }
+
+        // blur ALCHAO texture to remove noise
+        if (enableALCHAO) {
+            glBindFramebuffer(GL_FRAMEBUFFER, alchaoBlurFBO);
+            glClear(GL_COLOR_BUFFER_BIT);
+            shaderALCHAOBlur.use();
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, alchaoColorBuffer);
+            renderQuad();
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        }
         
         //  lighting pass
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -611,6 +697,9 @@ int main()
         else if (enableHBAO) {
             glBindTexture(GL_TEXTURE_2D, hbaoColorBufferBlur); // Use blurred HBAO texture
         }
+        else if (enableALCHAO) {
+            glBindTexture(GL_TEXTURE_2D, alchaoColorBufferBlur); // Use blurred HBAO texture
+        }
         else {
             glBindTexture(GL_TEXTURE_2D, whiteTexture); // Use the white texture when both SSAO and HBAO are disabled
         }
@@ -644,6 +733,7 @@ int main()
             ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate); 
             ImGui::Checkbox("Enable SSAO (SPACEBAR)", &enableSSAO); 
             ImGui::Checkbox("Enable HBAO (H)", &enableHBAO); 
+            ImGui::Checkbox("Enable HBAO (J)", &enableALCHAO); 
             ImGui::Checkbox("Enable Texture(T)", &enableTextures); 
             glm::vec3 camPos = camera.Position; 
             ImGui::Text("Camera Position:"); 
@@ -658,6 +748,13 @@ int main()
             // SLIDERS SSAO
             ImGui::SliderFloat("SSAO radius", &ss_radius, 0.0f, 100.f);
             ImGui::SliderFloat("SSAO bias", &ss_bias, 0.f, 1.f);
+
+            // SLIDERS ALCHAO
+            ImGui::InputFloat("ALCHAO radius", &al_radius, 0.0f, 100.f);
+            ImGui::SliderFloat("ALCHAO bias", &al_bias, 0.f, 1.f);
+            ImGui::InputFloat("ALCHAO sigma", &sigma, 0.f, 20.f);
+            ImGui::SliderInt("ALCHAO k", &k, 0, 10);
+            ImGui::InputFloat("ALCHAO beta", &beta, 0.f, 0.001f, "%.6f");
 
             // Pass updated values to the shader
             shaderHBAO.use();
@@ -769,6 +866,18 @@ void processInput(GLFWwindow* window)
     if (glfwGetKey(window, GLFW_KEY_H) == GLFW_RELEASE)
     {
         hPressed = false;
+    }
+
+    static bool jPressed = false;
+    if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS && !jPressed)
+    {
+        enableALCHAO = !enableALCHAO; // Toggle enableSSAO variable
+        jPressed = true;
+    }
+
+    if (glfwGetKey(window, GLFW_KEY_J) == GLFW_RELEASE)
+    {
+        jPressed = false;
     }
 
     static bool tpressed = false;

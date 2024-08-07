@@ -1,6 +1,12 @@
 #ifndef MESH_H
 #define MESH_H
 
+/*
+Mesh based on LearnOpenGL (de Vries, 2014)
+https://learnopengl.com/code_viewer_gh.php?code=includes/learnopengl/mesh.h
+Adjusted for needs of this application
+*/
+
 #include <glad/glad.h> // holds all OpenGL type declarations
 
 #include <glm/glm.hpp>

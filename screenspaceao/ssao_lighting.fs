@@ -1,4 +1,10 @@
 #version 330 core
+
+/*
+LearnOpenGL SSAO Lighting (de Vries, 2014)
+https://learnopengl.com/code_viewer_gh.php?code=src/5.advanced_lighting/9.ssao/9.ssao_lighting.fs
+*/
+
 out vec4 FragColor;
 
 in vec2 TexCoords;

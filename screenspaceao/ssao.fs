@@ -1,4 +1,11 @@
 #version 330 core
+
+/*
+LearnOpenGL SSAO Implementation (de Vries, 2014)
+https://learnopengl.com/Advanced-Lighting/SSAO
+Based on Starcraft II SSAO (Filion and McNaughton, 2008)
+https://www.scribd.com/document/632296500/Starcraft-2-Effects-Techniques
+*/
 out float FragColor;
 
 in vec2 TexCoords;

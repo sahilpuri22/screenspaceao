@@ -1,6 +1,12 @@
 #ifndef SHADER_H
 #define SHADER_H
 
+/*
+Shader based on LearnOpenGL (de Vries, 2014)
+https://learnopengl.com/code_viewer_gh.php?code=includes/learnopengl/shader.h
+Adjusted for needs of this application
+*/
+
 #include <glad/glad.h>
 #include <glm/glm.hpp>
 

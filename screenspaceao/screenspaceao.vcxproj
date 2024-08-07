@@ -151,9 +151,7 @@
     <ClInclude Include="shader_s.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="hbao.vs" />
     <None Include="hbao.fs" />
-    <None Include="hbao_blur.fs" />
     <None Include="ssao.fs" />
     <None Include="ssao.vs" />
     <None Include="ssao_alch.fs" />

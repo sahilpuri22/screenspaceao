@@ -1,6 +1,12 @@
 #ifndef MODEL_H
 #define MODEL_H
 
+/*
+Model loader based on LearnOpenGL (de Vries, 2014)
+https://learnopengl.com/code_viewer_gh.php?code=includes/learnopengl/model.h
+Adjusted for needs of this application
+*/
+
 #include <glad/glad.h> 
 
 #include <glm/glm.hpp>

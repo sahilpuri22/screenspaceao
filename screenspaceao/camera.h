@@ -1,6 +1,12 @@
 #ifndef CAMERA_H
 #define CAMERA_H
 
+/*
+Camera based on LearnOpenGL (de Vries, 2014)
+https://learnopengl.com/code_viewer_gh.php?code=includes/learnopengl/camera.h
+Adjusted for needs of this application
+*/
+
 #include <glad/glad.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>

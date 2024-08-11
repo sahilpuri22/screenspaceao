@@ -32,8 +32,9 @@ void renderQuad();
 
 
 // Screen Dimensions
-const unsigned int SCR_WIDTH = 800;
-const unsigned int SCR_HEIGHT = 600;
+unsigned int SCR_WIDTH = 1920;
+unsigned int SCR_HEIGHT = 1080;
+
 
 // Camera Setup
 Camera camera(glm::vec3(0.0f, 0.0f, 0.0f));
@@ -214,6 +215,7 @@ int main()
     glEnable(GL_DEPTH_TEST);
 
     // build and compile shaders
+
     Shader shaderGeometryPass("ssao_geometry.vs", "ssao_geometry.fs");
     Shader shaderLightingPass("ssao.vs", "ssao_lighting.fs");
 
@@ -229,6 +231,7 @@ int main()
     // load models
     string modelPath = "C:/Users/Admin/Dissertation/screenspaceao/screenspaceao/crytek_sponza/sponza.obj";
     Model sponzaModel(modelPath);
+
 
     // configure g-buffer framebuffer
     unsigned int gBuffer;
@@ -457,6 +460,8 @@ int main()
     shaderLightingPass.setInt("gAlbedo", 2);
     shaderLightingPass.setVec3("viewPos", camera.Position);
     shaderLightingPass.setInt("ssao", 3);
+    shaderLightingPass.setVec3("dirLight.Direction", -0.2f, -1.0f, -0.3f);
+    shaderLightingPass.setVec3("dirLight.Color", 0.5f, 0.5f, 0.5f); 
     shaderSSAO.use();
     shaderSSAO.setInt("gPosition", 0);
     shaderSSAO.setInt("gNormal", 1);
@@ -536,7 +541,7 @@ int main()
             glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 1000.0f);
             glm::mat4 view = camera.GetViewMatrix();
             glm::mat4 model = glm::mat4(1.0f);
-            shaderGeometryPass.use();
+            shaderGeometryPass.use();  // Use the arrow operator to access methods
             shaderGeometryPass.setBool("useTexture", enableTextures);
             shaderGeometryPass.setMat4("projection", projection);
             shaderGeometryPass.setMat4("view", view);
@@ -751,12 +756,12 @@ int main()
             // SLIDERS ALCHAO
             ImGui::Separator();
             ImGui::Text("ALCHAO Parameters");
-            ImGui::InputFloat("ALCHAO radius", &al_radius, 0.0f, 100.f);
+            ImGui::SliderFloat("ALCHAO radius", &al_radius, 0.0f, 20.f);
             ImGui::SliderFloat("ALCHAO bias", &al_bias, 0.f, 1.f);
-            ImGui::InputFloat("ALCHAO sigma", &al_sigma, 0.f, 20.f);
+            ImGui::SliderFloat("ALCHAO sigma", &al_sigma, 0.f, 20.f);
             ImGui::SliderInt("ALCHAO k", &al_k, 0, 10);
             ImGui::InputFloat("ALCHAO beta", &al_beta, 0.f, 0.001f, "%.6f");
-            ImGui::InputFloat("ALCHAO turns", &al_turns , 0.f, 30.f);
+            ImGui::SliderFloat("ALCHAO turns", &al_turns , 0.f, 30.f);
 
             ImGui::End();
 
@@ -775,7 +780,6 @@ int main()
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
-
 
     glfwTerminate();
     return 0;
@@ -965,12 +969,19 @@ void processInput(GLFWwindow* window)
 
 }
 
+
+
+
 // glfw whenever the window size changed (by OS or user resize) this callback function executes
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
-
     glViewport(0, 0, width, height);
+
 }
+
+
+
+
 
 // glfw whenever the mouse moves, this callback is called
 void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)

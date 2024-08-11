@@ -23,12 +23,16 @@ uniform float radius = 1.3f;
 uniform float bias = 0.025f;
 
 // tile noise texture over screen based on screen dimensions divided by noise size
-const vec2 noiseScale = vec2(800.0/4.0, 600.0/4.0);
+//const vec2 noiseScale = vec2(1920.0/4.0, 1080.0/4.0);
 
 uniform mat4 projection;
  
 void main()
 {
+     // Calculate noise scale based on the texture size
+    vec2 screenSize = textureSize(gPosition, 0).xy;
+    vec2 noiseSize = textureSize(texNoise, 0).xy;
+    vec2 noiseScale = screenSize / noiseSize;
 
     // get input for SSAO algorithm
     vec3 fragPos = texture(gPosition, TexCoords).xyz;

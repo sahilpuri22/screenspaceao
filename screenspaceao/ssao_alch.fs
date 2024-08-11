@@ -26,7 +26,7 @@ uniform float turns = 1.0f; // Turns parameter for sampling distribution
 const float epsilon = 0.001f; // Avoids divide by zero
 
 // Tile noise texture over screen based on screen dimensions divided by noise size
-const vec2 noiseScale = vec2(800.0 / 4.0, 600.0 / 4.0);
+//const vec2 noiseScale = vec2(1920.0 / 4.0, 1080.0 / 4.0);
 
 uniform mat4 projection;
 
@@ -47,7 +47,13 @@ vec2 RandomHashValue(float randomValue)
 }
 
 void main()
-{
+{   
+
+    // Calculate noise scale based on the texture size
+    vec2 screenSize = textureSize(gPosition, 0).xy;
+    vec2 noiseSize = textureSize(texNoise, 0).xy;
+    vec2 noiseScale = screenSize / noiseSize;
+
     // Random value updating based on screen coordinates
     float RANDOMVALUE = (TexCoords.x * TexCoords.y) * 64.0;
 
